@@ -1,0 +1,138 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  useReactTable,
+  getCoreRowModel,
+  flexRender,
+  createColumnHelper,
+} from "@tanstack/react-table";
+import { Plus } from "lucide-react";
+import { ModulePage } from "@/components/shared/module-page";
+import { ProductFormDialog } from "@/components/products/product-form-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/lib/utils";
+
+import { useSettings } from "@/components/providers/settings-provider";
+
+interface ProductRow {
+  _id: string;
+  name: string;
+  sku: string;
+  sellingPrice: number;
+  stock: number;
+  isActive: boolean;
+  categoryId?: { name?: string };
+}
+
+const columnHelper = createColumnHelper<ProductRow>();
+
+export default function ProductsPage() {
+  const { t } = useSettings();
+  const [data, setData] = useState<ProductRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const columns = [
+    columnHelper.accessor("name", { header: t("products") }),
+    columnHelper.accessor("sku", { header: "SKU" }),
+    columnHelper.accessor("sellingPrice", {
+      header: t("price"),
+      cell: (info) => formatCurrency(info.getValue()),
+    }),
+    columnHelper.accessor("stock", { header: t("stock") }),
+    columnHelper.accessor("isActive", {
+      header: t("status"),
+      cell: (info) => (
+        <Badge variant={info.getValue() ? "success" : "secondary"}>
+          {info.getValue() ? "Active" : "Inactive"}
+        </Badge>
+      ),
+    }),
+  ];
+
+  const load = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/products?limit=50");
+      const json = await res.json();
+      if (json.success) setData(json.data.items ?? []);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
+  return (
+    <ModulePage
+      title={t("productsTitle")}
+      description={t("productsSub")}
+    >
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>{t("productsTitle")}</CardTitle>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => setDialogOpen(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t("add")}
+          </Button>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {isLoading ? (
+            <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">Loading products...</p>
+          ) : (
+            <>
+              <table className="w-full text-sm">
+                <thead>
+                  {table.getHeaderGroups().map((hg) => (
+                    <tr key={hg.id} className="border-b text-left text-zinc-500 dark:text-zinc-400">
+                      {hg.headers.map((h) => (
+                        <th key={h.id} className="pb-3 pr-4 font-medium">
+                          {flexRender(h.column.columnDef.header, h.getContext())}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.map((row) => (
+                    <tr key={row.id} className="border-b border-zinc-100 dark:border-zinc-800">
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="py-3 pr-4">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {data.length === 0 && (
+                <p className="py-8 text-center text-zinc-500 dark:text-zinc-400">No products found. Run seed script.</p>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <ProductFormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={load}
+      />
+    </ModulePage>
+  );
+}
